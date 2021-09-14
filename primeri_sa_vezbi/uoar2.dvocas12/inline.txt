@@ -1,0 +1,220 @@
+Inline asembler koristimo u situacijama kada zelimo
+da izvrsimo neki blok asemblerskih instrukcija unutar
+naseg C koda. Ovo zelimo uraditi kada neki deo koda
+zelimo da ubrzamo, a pravljenje novih funkcija kao
+i novog asemblerskog fajla nije optimalno resenje
+(u krajnjem slucaj pozivanje funckije za sobom) donosi
+odredjenu cenu sa pravljenjem stek okvira kao i
+prebacivanjem na novi deo koda u memoriji sto moze
+da dovede do promasaja u kesu. Takodje navodjenjem
+cistog asembler dopustamo kompajelru da dodatno
+optimizuje nas kod sto moze dovesti do brzeg koda
+kao i do manjeg izvrsnog fajla. (Ovo drugo je bilo
+posebno zanimljivo programerima koji su napravili
+igricu kkrieger koja je zauzimala manje od 100KB!)
+
+Osnovni oblik inline asemblera je samo navodjenje
+instrukcija koje zelimo izvrsiti unutar __asm__ bloka koda
+
+__asm__(
+    "INSTRUKCIJA_1 \n\t"
+    "INSTRUKCIJA_2 \n\t"
+    ...
+);
+
+Bitno je napomenuti da gcc kompajler ocekuje asembler
+u AT&T formatu. Kako smo na ovom kursu navikli na 
+intelovu sintaksu, kompajleru dodajemo opciju -masm=intel
+prilikom prevodjenja.
+
+Razlike izmedju dve sintakse:
++------------------------------+------------------------------------+
+|       Intel Code             |      AT&T Code                     |
++------------------------------+------------------------------------+
+| mov     eax,1                |  movl    $1,%eax                   |   
+| mov     ebx,0ffh             |  movl    $0xff,%ebx                |   
+| int     80h                  |  int     $0x80                     |   
+| mov     ebx, eax             |  movl    %eax, %ebx                |
+| mov     eax,[ecx]            |  movl    (%ecx),%eax               |
+| mov     eax,[ebx+3]          |  movl    3(%ebx),%eax              | 
+| mov     eax,[ebx+20h]        |  movl    0x20(%ebx),%eax           |
+| add     eax,[ebx+ecx*2h]     |  addl    (%ebx,%ecx,0x2),%eax      |
+| lea     eax,[ebx+ecx]        |  leal    (%ebx,%ecx),%eax          |
+| sub     eax,[ebx+ecx*4h-20h] |  subl    -0x20(%ebx,%ecx,0x4),%eax |
++------------------------------+------------------------------------+
+
+Prosireni inline asembler nam daje mogucnosti definisanja operanada
+koje zelimo koristiti u nasem bloku saemblerskog koda
+Sintaksa izgleda ovako:
+__asm__(
+    ASEMBLERSKE INSTRUKCIJE
+    : IZLAZNI OPERANDI
+    : ULAZNI OPERANDI
+    : PROMENJENI REGISTRI
+);
+
+Promenjeni registri su oni koje u asemblerskom kodu eksplicitno 
+navodimo. Ukoliko su promenjeni registri samo oni koje koristimo kao
+operande onda listu promenjenih registara nije potrebno pisati.
+Nju ce kompajler ispravno izgenerisati.
+U ovom slucaju kod izgleda ovako:
+
+__asm__(
+    ASEMBLERSKE INSTRUKCIJE
+    : IZLAZNI OPERANDI
+    : ULAZNI OPERANDI
+);
+
+Ukoliko nam ulazni operandi nisu potrebni mozemo i njih izostaviti
+
+__asm__(
+    ASEMBLERSKE INSTRUKCIJE
+    : IZLAZNI OPERANDI
+);
+
+VAZNO! Ukoliko zelimo da imamo ulazne operande, a nisu nam potrebni
+izlazni moramo to navesti ovako:
+
+__asm__(
+    ASEMBLERSKE INSTRUKCIJE
+    :
+    : ULAZNI OPERANDI
+);
+
+
+Ulazne i izlazne operande navodimo razdvojene zarezom i svaki
+operand ima sledeci oblik:
+
+"OGRANICENJA" (IZRAZ)
+
+IZRAZ ce na kursu uglavnom biti ime promenjive, ali tu mogu stajti
+i druge stvari(za ulazne bilo sta, za izlazne bilo sta sto moze biti
+sa leve strane znaka =, odnosno ono sto zelimo da bude promenjeno nakon
+izvrsavanja asemblerskog koda).
+
+Nase operande u samom asemblerskom kodu mozemo koristiti sa
+%N, gde je N redni broj operanda pocevsi od 0, ukljucujuci i izlazne
+i ulazne operande.
+
+__asm__(
+    "mov %0, %1 \n\t"  /* u promenjivu x stavljamo 111 */
+    "mov edx, %2 \n\t" /* u edx stavljamo 222 */
+    "mov ecx, %3 \n\t" /* u ecx stavljamo vrednost promenjive x */
+    "mov edi, %4 \n\t" /* u edi stavljamo vrednost promenjive y */
+    : "=r" (x)
+    : "r" (111), "r" (222), "r" (x), "r" (y) 
+)
+
+Takodje mozemo imenovati nase operande na sledeci nacin:
+
+[IME] "OGRANICENJA" (IZRAZ)
+
+Ovo nam dozvoljava da u asemblerskom kodu umesto rednog broja
+koristimo %[IME]
+
+__asm__(
+    "mov eax, %0 \n\t" /* u eax stavljamo 111 */
+    "mov edx, %1 \n\t" /* u edx stavljamo 222 */
+    "mov ecx, %2 \n\t" /* u ecx stavljamo vrednost promenjive x */
+    "mov edi, %[drugi] \n\t" /* u edi stavljamo 222 */
+    :
+    : "r" (111), [drugi] "r" (222), "r" (x) 
+)
+
+OGRANICENJA:
+Ovo polje koristimo kako bi opisali kompajleru na koji nacin
+nase operande treba koristiti i kako sa njima rukovati.
+Postoje 3 osnovna tipa ogranicenja:
+
+1) Opis memorije u kojoj cuvamo operand:
+
+Najjednostavniji slucaj smo vec videli, navodjenjem ogranicenja
+"r" mi kompajleru kazemo da izabere neki registar za cuvanje
+operanda. Kompajler ce se postarati da se ovako izabrani registri 
+ne poklapaju medjusobno, kao ni sa registrima iz liste promenjenih 
+registara.
+
+Ukoliko zelimo da imamo vecu kontrolu nad koriscenim 
+registrima mozemo eksplictno navesti koji registar koristimo. 
+To radimo tako sto umesto r napisemo ime registra koji koristimo. 
+U sledecoj tabeli mozemo videti kako nazivamo nase registre:
+
++---+--------------------------+
+| r |    Registri              |
++---+--------------------------+
+| a |   %rax, %eax, %ax, %al   |
+| b |   %rbx, %ebx, %bx, %bl   |
+| c |   %rcx, %ecx, %cx, %cl   |
+| d |   %rdx, %edx, %dx, %dl   |
+| S |   %rsi, %esi, %si        |
+| D |   %rdi, %edi, %di        |
++---+--------------------------+
+
+__asm__(
+    "cdq \n\t"
+    "idiv %3 \n\t"
+    : "=a" (kol), "=d" (ost)
+    : "a" (x), "b" (y)
+);
+
+Nakon izvrsenja ovog bloka u promenjivu kol upisano je x / y, a u
+promenjivu ost je upisano x % y.
+
+Pored registarskih mozemo imati i memorijske operande. Njima
+kao ogranicenje navedemo "m". Ovako nesto mozemo koristiti ukoliko
+nam nije potrebno prebacivanje iz memorije u registar vec mozemo
+sve izvrsiti direktno u memoriji.
+
+
+2) Ogranicenja izmena operanda
+
+Pored samih registara koje zelimo da koristimo zelimo i da ogranicimo
+nacine na koje se ti registri koriste kako bi kompajler osigurao
+ispravnost generisanog koda. Ovu vrstu ogranicenja mozemo staviti
+samo kod izlaznih operanada.
+
+Osnovni modifikatori su:
+= u operand zelimo samo da upisujemo stvari
++ operand koristimo i za citanje i za pisanje
+& operand menja vrednost pre nego sto smo zavrsili sa koriscenjem
+  ulaznih operanada. Ovo naglasava kompajleru da registar/memorija koriscen
+  za ovaj operand ne sme biti koriscen za ulazne operande
+
+3) Ogranicenje poklapanjem (matching constraint)
+
+Nekada je pozeljno koristiti iste registre i za ulazne i za izlazne
+operande. Ovo mozemo postici navodjenjem rednog broja izlaznog operanda
+kao ogranicenje.
+
+__asm__(
+        ""
+        : "=r" (x), "=r" (y)
+        : "1" (x), "0" (y) 
+    );    
+Nakon izvrsenje ovog bloka promenjive x i y ce imati zamenjene 
+vrednosti.
+
+
+VOLATILE:
+Kompajler prilikom optimizacije koda moze menjati mesto instrukcijama, 
+a moze i obrisati instrukcije koje smatra nepotrebnim. Nekada kod koji
+smo napisali moze biti osetljiv na ovakve promene i moze imati efekte
+koje kompajler ne moze da predvidi. Kako bi skrenuli paznju kompajleru
+da mora biti posebno pazljiv sa nekom sekcijom koda mozemo koristiti
+kljucnu rec volatile na sledeci nacin:
+
+__asm__ volatile (
+    ....
+);
+
+Ovo se najcesce koristi prilikom sistemskih poziva ili ukoliko
+se neke stvari odigravaju u vise niti. Za jednostavna aritmeticka
+izracunavanja ova kljucna rec nece biti neophodna. Sta vise zbog
+ogranicenih optimizacija moze i usporiti nas kod.
+
+=======================================================================
+DODATNI MATERIJALI
+http://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html
+https://gcc.gnu.org/onlinedocs/gcc-4.1.2/gcc/Extended-Asm.html
+https://www.codeproject.com/Articles/15971/Using-Inline-Assembly-in-C-C
+https://en.cppreference.com/w/c/language/asm
