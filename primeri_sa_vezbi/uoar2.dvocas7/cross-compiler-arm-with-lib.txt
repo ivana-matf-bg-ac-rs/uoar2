@@ -1,0 +1,21 @@
+Da biste koristili ARM arhitekturu kao sto cemo raditi na vezbama potrebno 
+je da instalirate dodatne alate. Uputstvo za Ubuntu OS je sledece:
+
+Pokrenuti komande:
+
+sudo apt-get update
+sudo apt install -y build-essential gcc-arm-linux-gnueabi
+sudo apt install qemu-user
+
+Napisati obican hello world program u c-u i sacuvati u main.c datoteci.
+Njega je potrebno prevesti i pokrenuti pomocu:
+
+arm-linux-gnueabi-gcc main.c -o main.out
+qemu-arm main.out 
+
+Ukoliko se javi greska da nije moguce naci biblioteke ld-linux.so.3 i libc.so.6,
+pokrenuti i sledece komande:
+
+sudo ln -s /usr/arm-linux-gnueabi/lib/ld-linux.so.3 /lib/ld-linux.so.3 
+sudo ln -s /usr/arm-linux-gnueabi/lib/libc.so.6 /lib/libc.so.6
+ 

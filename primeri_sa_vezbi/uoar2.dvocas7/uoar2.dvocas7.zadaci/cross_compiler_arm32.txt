@@ -1,0 +1,8 @@
+# Instalacija
+sudo apt-get update
+sudo apt install -y build-essential gcc-arm-linux-gnueabi
+sudo apt install qemu-user
+
+# Prevodjenje
+arm-linux-gnueabi-gcc main.c -o main.out
+qemu-arm main.out 
